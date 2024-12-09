@@ -5,74 +5,30 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
-#define MAX_CMD_LENGTH 1024
+#define MAX_CMD_LENGTH 1000
 #define MAX_ARGS 100
-#define MAX_PATH 1024
-
-// Global environment variables storage
-char *env_vars[100][2];  // Array of key-value pairs
-int env_count = 0;
-
-// Function to get an environment variable value
-char* get_env(const char* name) {
-    for (int i = 0; i < env_count; ++i) {
-        if (strcmp(env_vars[i][0], name) == 0) {
-            return env_vars[i][1];
-        }
-    }
-    return NULL;
-}
-
-// Function to set an environment variable
-void set_env(const char* name, const char* value) {
-    for (int i = 0; i < env_count; ++i) {
-        if (strcmp(env_vars[i][0], name) == 0) {
-            free(env_vars[i][1]);
-            env_vars[i][1] = strdup(value);
-            return;
-        }
-    }
-    env_vars[env_count][0] = strdup(name);
-    env_vars[env_count][1] = strdup(value);
-    ++env_count;
-}
-
-// Function to unset an environment variable
-void unset_env(const char* name) {
-    for (int i = 0; i < env_count; ++i) {
-        if (strcmp(env_vars[i][0], name) == 0) {
-            free(env_vars[i][0]);
-            free(env_vars[i][1]);
-            for (int j = i; j < env_count - 1; ++j) {
-                env_vars[j][0] = env_vars[j + 1][0];
-                env_vars[j][1] = env_vars[j + 1][1];
-            }
-            --env_count;
-            return;
-        }
-    }
-}
+#define MAX_PATH 1000
 
 // Function to parse and replace environment variables in the input
 void replace_env_vars(char* command) {
     char result[MAX_CMD_LENGTH] = {0};
-    int i = 0, j = 0;
+    int ix = 0, iy = 0;
 
-    while (command[i] != '\0') {
-        if (command[i] == '$') {
-            i++;
-            int start = i;
-            while (command[i] != ' ' && command[i] != '\0' && command[i] != '$') {
-                i++;
+    while (command[ix] != '\0') {
+        if (command[ix] == '$') {
+            ix++;
+            int start = ix;
+            while (command[ix] != ' ' && command[ix] != '\0' && command[ix] != '$') {
+                ix++;
             }
             char var_name[MAX_CMD_LENGTH] = {0};
-            strncpy(var_name, command + start, i - start);
-            char* value = get_env(var_name);
+            strncpy(var_name, command + start, ix - start);
+            char* value = getenv(var_name);  // Use the system environment
             if (value) {
                 strcat(result, value);
             }
         } else {
-            result[j++] = command[i++];
+            result[iy++] = command[ix++];
         }
     }
     strcpy(command, result);
@@ -81,25 +37,25 @@ void replace_env_vars(char* command) {
 // Function to manually split a string into tokens using spaces (without strtok)
 int split_command(char* command, char* args[]) {
     int argc = 0;
-    int i = 0, j = 0;
-    
-    while (command[i] != '\0') {
+    int ix = 0, iy = 0;
+
+    while (command[ix] != '\0') {
         // Skip leading spaces
-        while (command[i] == ' ' && command[i] != '\0') {
-            i++;
+        while (command[ix] == ' ' && command[ix] != '\0') {
+            ix++;
         }
 
         // Find end of the current word
-        j = i;
-        while (command[j] != ' ' && command[j] != '\0') {
-            j++;
+        iy = ix;
+        while (command[iy] != ' ' && command[iy] != '\0') {
+            iy++;
         }
 
         // If there is a word, save it
-        if (i != j) {
-            command[j] = '\0';  // Null-terminate the word
-            args[argc++] = command + i;
-            i = j + 1;
+        if (ix != iy) {
+            command[iy] = '\0'; 
+            args[argc++] = command + ix;
+            ix = iy + 1;
         }
     }
 
@@ -128,6 +84,9 @@ int execute_builtin(char **args) {
         }
         return 1;
     }
+    if (strcmp(args[0], "exit") == 0 || strcmp(args[0], "quit") == 0) {
+        exit(0);  // Exit the shell
+    }
     return 0;
 }
 
@@ -139,7 +98,7 @@ void execute_external(char **args, int background) {
         perror("Command not found");
         exit(1);
     } else if (!background) {
-        wait(NULL);  // Wait for foreground process to finish
+        wait(NULL); 
     }
 }
 
@@ -153,7 +112,6 @@ int handle_background(char* args[], int argc) {
     return background;
 }
 
-// Main shell loop
 int main() {
     char command[MAX_CMD_LENGTH];
     char *args[MAX_ARGS];
@@ -163,7 +121,7 @@ int main() {
         if (!fgets(command, sizeof(command), stdin)) {
             break;
         }
-        command[strcspn(command, "\n")] = '\0';  // Remove trailing newline
+        command[strcspn(command, "\n")] = '\0';
 
         // Exit condition
         if (strcmp(command, "exit") == 0 || strcmp(command, "quit") == 0) {
@@ -173,7 +131,6 @@ int main() {
         // Replace environment variables in the command
         replace_env_vars(command);
 
-        // Tokenize the command manually
         int argc = split_command(command, args);
 
         // Handle built-in commands first
